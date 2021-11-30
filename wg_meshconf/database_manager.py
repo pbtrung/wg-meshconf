@@ -15,6 +15,7 @@ import copy
 import csv
 import pathlib
 import sys
+import base64
 
 # third party imports
 from rich.console import Console
@@ -70,6 +71,7 @@ KEY_TYPE = {
     "PersistentKeepalive": int,
     "FwMark": str,
     "PrivateKey": str,
+    "PrivatePresharedKey": str,
     "DNS": str,
     "MTU": int,
     "Table": str,
@@ -114,6 +116,10 @@ class DatabaseManager:
                 if database["peers"][peer].get("PrivateKey") is None:
                     privatekey = self.wireguard.genkey()
                     database["peers"][peer]["PrivateKey"] = privatekey
+
+                if database["peers"][peer].get("PrivatePresharedKey") is None:
+                    privatekey = self.wireguard.genpsk()
+                    database["peers"][peer]["PrivatePresharedKey"] = privatekey
             self.write_database(database)
 
     def read_database(self):
@@ -344,6 +350,7 @@ class DatabaseManager:
                 config.write(
                     "PrivateKey = {}\n".format(database["peers"][peer]["PrivateKey"])
                 )
+                peer_bytes = base64.b64decode(database["peers"][peer]["PrivatePresharedKey"])
 
                 for key in INTERFACE_OPTIONAL_ATTRIBUTES:
                     if database["peers"][peer].get(key) is not None:
@@ -359,6 +366,12 @@ class DatabaseManager:
                         "PublicKey = {}\n".format(
                             self.wireguard.pubkey(database["peers"][p]["PrivateKey"])
                         )
+                    )
+
+                    p_bytes = base64.b64decode(database["peers"][p]["PrivatePresharedKey"])
+                    privatekey = bytes(a ^ b for (a, b) in zip(peer_bytes, p_bytes))
+                    config.write(
+                        "PresharedKey = {}\n".format(base64.b64encode(privatekey).decode())
                     )
 
                     if database["peers"][p].get("Endpoint") is not None:
